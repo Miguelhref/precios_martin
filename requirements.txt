@@ -1,0 +1,3 @@
+flask
+forex-python
+openpyxl

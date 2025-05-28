@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Miner Models</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #f9f9f9;
+  }
+  h2 {
+    color: #333;
+  }
+  form {
+    margin-bottom: 30px;
+  }
+  input[type="file"] {
+    margin-right: 10px;
+  }
+  .cards-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.15);
+    padding: 15px 20px;
+    width: 280px;
+    box-sizing: border-box;
+    transition: transform 0.2s ease;
+  }
+  .card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgb(0 0 0 / 0.2);
+  }
+  .model {
+    font-weight: bold;
+    font-size: 1.2em;
+    margin-bottom: 12px;
+    color: #004080;
+  }
+  .price-row {
+    margin-bottom: 8px;
+  }
+  .label {
+    color: #555;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .value {
+    color: #222;
+    white-space: pre-line;
+  }
+  .value-line {
+    color: #222;
+    margin-bottom: 2px;
+  }
+</style>
+</head>
+<body>
+
+<h2>Subir archivo de cotización (.txt o .xlsx)</h2>
+<form action="/" method="post" enctype="multipart/form-data">
+  <input type="file" name="file" accept=".txt,.xlsx" required />
+  <input type="submit" value="Procesar archivo" />
+</form>
+
+{% if error %}
+<p style="color: red;">{{ error }}</p>
+{% endif %}
+
+{% if resultados %}
+<h2>Resultados:</h2>
+<div class="cards-container">
+  {% for r in resultados %}
+  <div class="card">
+    <div class="model">{{ r.modelo }}</div>
+
+    <div class="price-row">
+      <span class="label">Precio (USD):</span>
+      {% if r.is_multiple %}
+        {% for precio in r.precio_list %}
+        <div class="value-line">{{ precio }}</div>
+        {% endfor %}
+      {% else %}
+        <div class="value">{{ r.precio }}</div>
+      {% endif %}
+    </div>
+
+    <div class="price-row">
+      <span class="label">PVP (USD):</span>
+      {% if r.is_multiple %}
+        {% for pvp in r.pvp_list %}
+        <div class="value-line">{{ pvp }}</div>
+        {% endfor %}
+      {% else %}
+        <div class="value">{{ r.pvp }}</div>
+      {% endif %}
+    </div>
+
+    <div class="price-row">
+      <span class="label">Precio (€):</span>
+      {% if r.is_multiple %}
+        {% for precio_eur in r.precio_eur_list %}
+        <div class="value-line">{{ precio_eur }}</div>
+        {% endfor %}
+      {% else %}
+        <div class="value">{{ r.precio_eur }}</div>
+      {% endif %}
+    </div>
+
+    <div class="price-row">
+      <span class="label">PVP (€):</span>
+      {% if r.is_multiple %}
+        {% for pvp_eur in r.pvp_eur_list %}
+        <div class="value-line">{{ pvp_eur }}</div>
+        {% endfor %}
+      {% else %}
+        <div class="value">{{ r.pvp_eur }}</div>
+      {% endif %}
+    </div>
+
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+</body>
+</html>
