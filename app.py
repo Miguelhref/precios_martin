@@ -1,11 +1,16 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, send_file
 import re
 from forex_python.converter import CurrencyRates
 import openpyxl
 import io
+import tempfile
 
 app = Flask(__name__)
 currency = CurrencyRates()
+
+resultados_exportables = []  # para guardar datos exportables
+excel_tempfile = None  # para almacenar archivo temporal
+
 
 def parse_line(line, usd_to_eur):
     # Extraer modelo y primer precio base para fallback
@@ -120,8 +125,11 @@ def parse_line(line, usd_to_eur):
 
 @app.route("/", methods=["GET", "POST"])
 def index():
+    global resultados_exportables, excel_tempfile
     resultados = []
     error = None
+    nombre_archivo = None
+
     if request.method == "POST":
         try:
             usd_to_eur = currency.get_rate('USD', 'EUR')
@@ -130,7 +138,9 @@ def index():
 
         file = request.files.get("file")
         if file:
-            filename = file.filename.lower()
+            filename = file.filename
+            nombre_archivo = filename
+            filename = filename.lower()
 
             if filename.endswith(".txt"):
                 lines = file.read().decode("utf-8").splitlines()
@@ -182,14 +192,48 @@ def index():
                 lines = []
 
             if not error:
+                resultados_exportables = []
                 for line in lines:
                     if "$" in line:
                         parsed = parse_line(line, usd_to_eur)
                         if parsed:
                             resultados.append(parsed)
+                            if parsed["is_multiple"]:
+                                for i in range(len(parsed["precio_list"])):
+                                    resultados_exportables.append({
+                                        "modelo": parsed["modelo"],
+                                        "precio": parsed["precio_list"][i],
+                                        "pvp": parsed["pvp_list"][i],
+                                        "precio_eur": parsed["precio_eur_list"][i],
+                                        "pvp_eur": parsed["pvp_eur_list"][i],
+                                    })
+                            else:
+                                resultados_exportables.append({
+                                    "modelo": parsed["modelo"],
+                                    "precio": parsed["precio"],
+                                    "pvp": parsed["pvp"],
+                                    "precio_eur": parsed["precio_eur"],
+                                    "pvp_eur": parsed["pvp_eur"],
+                                })
 
-    return render_template("index.html", resultados=resultados, error=error)
+                # Guardar Excel temporalmente
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.append(["Modelo", "Precio (USD)", "PVP (USD)", "Precio (€)", "PVP (€)"])
+                for r in resultados_exportables:
+                    ws.append([r["modelo"], r["precio"], r["pvp"], r["precio_eur"], r["pvp_eur"]])
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+                wb.save(tmp.name)
+                excel_tempfile = tmp.name
 
+    return render_template("index.html", resultados=resultados, error=error, nombre_archivo=nombre_archivo)
+
+@app.route("/download")
+def download_excel():
+    global excel_tempfile
+    if excel_tempfile:
+        return send_file(excel_tempfile, as_attachment=True, download_name="resultados.xlsx")
+    return "No hay archivo disponible para descargar."
 
 if __name__ == "__main__":
     app.run(debug=True)

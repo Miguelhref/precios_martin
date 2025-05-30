@@ -68,13 +68,21 @@
   <input type="file" name="file" accept=".txt,.xlsx" required />
   <input type="submit" value="Procesar archivo" />
 </form>
+{% if nombre_archivo %}
+<p><strong>Archivo procesado:</strong> {{ nombre_archivo }}</p>
+{% endif %}
 
 {% if error %}
 <p style="color: red;">{{ error }}</p>
 {% endif %}
 
 {% if resultados %}
+
 <h2>Resultados:</h2>
+<form method="get" action="/download">
+  <button type="submit">Descargar Excel</button>
+</form>
+
 <div class="cards-container">
   {% for r in resultados %}
   <div class="card">
