@@ -1,141 +1,43 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8" />
-<title>Miner Models</title>
-<style>
-  body {
-    font-family: Arial, sans-serif;
-    margin: 20px;
-    background: #f9f9f9;
-  }
-  h2 {
-    color: #333;
-  }
-  form {
-    margin-bottom: 30px;
-  }
-  input[type="file"] {
-    margin-right: 10px;
-  }
-  .cards-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
-  }
-  .card {
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 2px 6px rgb(0 0 0 / 0.15);
-    padding: 15px 20px;
-    width: 280px;
-    box-sizing: border-box;
-    transition: transform 0.2s ease;
-  }
-  .card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 20px rgb(0 0 0 / 0.2);
-  }
-  .model {
-    font-weight: bold;
-    font-size: 1.2em;
-    margin-bottom: 12px;
-    color: #004080;
-  }
-  .price-row {
-    margin-bottom: 8px;
-  }
-  .label {
-    color: #555;
-    font-weight: 600;
-    display: block;
-    margin-bottom: 4px;
-  }
-  .value {
-    color: #222;
-    white-space: pre-line;
-  }
-  .value-line {
-    color: #222;
-    margin-bottom: 2px;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Procesador de Máquinas</title>
+  <script defer src="{{ url_for('static', filename='script.js') }}"></script>
+
+  <style>
+    body { font-family: sans-serif; margin: 2rem; background-color: #f4f4f4; }
+    h1 { text-align: center; }
+    .botones, .download { display: flex; gap: 1rem; justify-content: center; margin-bottom: 1rem; }
+    .info { text-align: center; margin-bottom: 2rem; font-weight: bold; }
+    .cards { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; }
+    .card {
+      padding: 1rem; border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 300px;
+    }
+    .success { background-color: #e6ffed; border-left: 5px solid #2ecc71; }
+    .error { background-color: #ffe6e6; border-left: 5px solid #e74c3c; }
+    input[type="number"] { width: 6rem; padding: 0.2rem; }
+  </style>
 </head>
 <body>
+  <h1>Procesador de Máquinas</h1>
 
-<h2>Subir archivo de cotización (.txt o .xlsx)</h2>
-<form action="/" method="post" enctype="multipart/form-data">
-  <input type="file" name="file" accept=".txt,.xlsx" required />
-  <input type="submit" value="Procesar archivo" />
-</form>
-{% if nombre_archivo %}
-<p><strong>Archivo procesado:</strong> {{ nombre_archivo }}</p>
-{% endif %}
-
-{% if error %}
-<p style="color: red;">{{ error }}</p>
-{% endif %}
-
-{% if resultados %}
-
-<h2>Resultados:</h2>
-<form method="get" action="/download">
-  <button type="submit">Descargar Excel</button>
-</form>
-
-<div class="cards-container">
-  {% for r in resultados %}
-  <div class="card">
-    <div class="model">{{ r.modelo }}</div>
-
-    <div class="price-row">
-      <span class="label">Precio (USD):</span>
-      {% if r.is_multiple %}
-        {% for precio in r.precio_list %}
-        <div class="value-line">{{ precio }}</div>
-        {% endfor %}
-      {% else %}
-        <div class="value">{{ r.precio }}</div>
-      {% endif %}
-    </div>
-
-    <div class="price-row">
-      <span class="label">PVP (USD):</span>
-      {% if r.is_multiple %}
-        {% for pvp in r.pvp_list %}
-        <div class="value-line">{{ pvp }}</div>
-        {% endfor %}
-      {% else %}
-        <div class="value">{{ r.pvp }}</div>
-      {% endif %}
-    </div>
-
-    <div class="price-row">
-      <span class="label">Precio (€):</span>
-      {% if r.is_multiple %}
-        {% for precio_eur in r.precio_eur_list %}
-        <div class="value-line">{{ precio_eur }}</div>
-        {% endfor %}
-      {% else %}
-        <div class="value">{{ r.precio_eur }}</div>
-      {% endif %}
-    </div>
-
-    <div class="price-row">
-      <span class="label">PVP (€):</span>
-      {% if r.is_multiple %}
-        {% for pvp_eur in r.pvp_eur_list %}
-        <div class="value-line">{{ pvp_eur }}</div>
-        {% endfor %}
-      {% else %}
-        <div class="value">{{ r.pvp_eur }}</div>
-      {% endif %}
-    </div>
-
+  <div class="botones">
+    <input type="file" id="archivo" />
+    <input type="number" id="valorEuro" step="0.01" placeholder="€ / $" />
+    <button id="procesar">Procesar archivo</button>
   </div>
-  {% endfor %}
-</div>
-{% endif %}
 
+  <div class="info">
+    Archivo seleccionado: <span id="nombreArchivo">Ninguno</span>
+  </div>
+
+  <div class="cards" id="resultado"></div>
+
+  <div class="download">
+    <button id="descargar">Descargar CSV</button>
+  </div>
 </body>
 </html>
