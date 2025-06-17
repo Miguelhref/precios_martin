@@ -124,11 +124,20 @@ def parsear_excel_especializado(df, factor):
                 parte = parte.strip()
                 if not parte:
                     continue
+                if '-' in parte:
+                    # Detectar rango tipo 200-206T
+                    match = re.match(r'(\d+)-(\d+)([TtG])', parte)
+                    if match:
+                        ini, fin, suf = match.groups()
+                        for i in range(int(ini), int(fin)+1):
+                            versiones.append(f"{i}{suf.upper()}")
+                        continue
                 if re.search(r'[TtGmM]$', parte):
                     versiones.append(parte.upper())
                     sufijo = parte[-1].upper()
                 else:
                     versiones.append(parte + sufijo)
+
 
             if unit_price_raw and unit_price_raw.lower() != 'nan':
                 precio_fijo = detectar_numero(unit_price_raw)
