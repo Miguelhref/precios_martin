@@ -3,6 +3,7 @@ import pandas as pd
 import re
 import io
 import csv
+import math
 
 app = Flask(__name__)
 
@@ -50,8 +51,8 @@ def procesar():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/corregir", methods=["POST"])
-def corregir():
+@app.route("/agregar_manual", methods=["POST"])
+def agregar_manual():
     global resultados_ok
     data = request.get_json()
     modelo = data.get("modelo")
@@ -61,19 +62,8 @@ def corregir():
 
     try:
         precio = float(precio)
-        precio_euro = round(precio * factor, 2)
-        pvp_usd = round(precio * 1.25, 2)
-        pvp_euro = round(precio_euro * 1.25, 2)
-        resultado = {
-            "modelo": modelo,
-            "version": version,
-            "precio": f"{precio}$",
-            "precio_euro": f"{precio_euro}€",
-            "pvp_usd": f"{pvp_usd}$",
-            "pvp_euro": f"{pvp_euro}€"
-        }
-        resultados_ok.append(resultado)
-        return jsonify(resultado)
+        registrar_resultado(modelo, version, precio, factor)
+        return jsonify(resultados_ok[-1])
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
@@ -90,8 +80,35 @@ def descargar_csv():
 def detectar_numero(precio_str):
     precio_str = precio_str.strip().replace(" ", "")
     if ',' not in precio_str and '.' in precio_str and len(precio_str.split('.')[-1]) == 3:
-        return float(precio_str.replace('.', ''))  # 9.100 → 9100
+        return float(precio_str.replace('.', ''))
     return float(precio_str.replace(',', '.'))
+
+def extraer_versiones(raw):
+    versiones = []
+    sufijo = 'T'
+    bloques = re.split(r'[/,;]', raw)
+    for bloque in bloques:
+        bloque = bloque.strip()
+        if not bloque:
+            continue
+        match_rango = re.match(r'^(\d+)-(\d+)([TtGg])$', bloque)
+        if match_rango:
+            ini, fin, suf = match_rango.groups()
+            for i in (int(ini), int(fin)):
+                versiones.append(f"{i}{suf.upper()}")
+            continue
+        match_solo_numeros = re.match(r'^(\d+)-(\d+)$', bloque)
+        if match_solo_numeros:
+            ini, fin = match_solo_numeros.groups()
+            for i in (int(ini), int(fin)):
+                versiones.append(f"{i}{sufijo}")
+            continue
+        if re.search(r'[TtGg]$', bloque):
+            versiones.append(bloque.upper())
+            sufijo = bloque[-1].upper()
+        else:
+            versiones.append(f"{bloque}{sufijo}")
+    return versiones
 
 def parsear_excel_especializado(df, factor):
     headers = ['Coin', 'Brand', 'Model', 'Hashrate/T', 'Efficiency', 'Price/T', 'Unit Price', 'MOQ', 'Delivery Time']
@@ -118,26 +135,7 @@ def parsear_excel_especializado(df, factor):
                 resultados_error.append(str(fila.to_dict()))
                 continue
 
-            versiones = []
-            sufijo = 'T'
-            for parte in versiones_raw.split('/'):
-                parte = parte.strip()
-                if not parte:
-                    continue
-                if '-' in parte:
-                    # Detectar rango tipo 200-206T
-                    match = re.match(r'(\d+)-(\d+)([TtG])', parte)
-                    if match:
-                        ini, fin, suf = match.groups()
-                        for i in range(int(ini), int(fin)+1):
-                            versiones.append(f"{i}{suf.upper()}")
-                        continue
-                if re.search(r'[TtGmM]$', parte):
-                    versiones.append(parte.upper())
-                    sufijo = parte[-1].upper()
-                else:
-                    versiones.append(parte + sufijo)
-
+            versiones = extraer_versiones(versiones_raw)
 
             if unit_price_raw and unit_price_raw.lower() != 'nan':
                 precio_fijo = detectar_numero(unit_price_raw)
@@ -160,36 +158,20 @@ def parsear_excel_especializado(df, factor):
 
 def parse(linea, factor):
     global ultimo_modelo
-    matches = re.findall(r'([^\s]*[TtG](?:/[^\s]*)*)', linea)
+    matches = re.findall(r'([^\s]*[TtG](?:[/\-][^\s]*)*)', linea)
     modelo = None
     hashrates = []
 
     for bloque in matches:
         if not re.search(r'\d', bloque): continue
         if re.search(r'[TtG](?=[A-Za-z])', bloque): continue
-
-        partes = bloque.split('/')
         segmento = linea.split(bloque)[0].strip()
-
         if segmento:
             modelo = segmento
             ultimo_modelo = modelo
         elif ultimo_modelo:
             modelo = ultimo_modelo
-
-        sufijo = None
-        for parte in partes:
-            if re.search(r'[TtG]$', parte):
-                sufijo = parte[-1].upper()
-                break
-        sufijo = sufijo or 'T'
-
-        for parte in partes:
-            parte = parte.strip()
-            if not parte: continue
-            if not re.search(r'[TtG]$', parte):
-                parte += sufijo
-            hashrates.append(parte.upper())
+        hashrates = extraer_versiones(bloque)
         break
 
     if not modelo or not hashrates:
@@ -202,15 +184,7 @@ def parse(linea, factor):
         return
 
     bloque_precios = bloque_precios_match.group(1).split('/')
-
     precios_version = []
-    sufijo_precio = None
-    for p in bloque_precios:
-        p = p.strip()
-        if p.endswith('T'):
-            sufijo_precio = 'T'
-            break
-
     for p in bloque_precios:
         p = p.strip().rstrip('T').replace(',', '.')
         try:
@@ -243,13 +217,14 @@ def parse(linea, factor):
         registrar_resultado(modelo, hr, total, factor)
 
 def registrar_resultado(modelo, version, precio_usd, factor):
-    precio_euro = round(precio_usd * factor, 2)
-    pvp_usd = round(precio_usd * 1.25, 2)
+    precio_usd_redondeado = math.ceil(precio_usd)
+    precio_euro = round(precio_usd_redondeado * factor, 2)
+    pvp_usd = round(precio_usd_redondeado * 1.25, 2)
     pvp_euro = round(precio_euro * 1.25, 2)
     resultados_ok.append({
         "modelo": modelo,
         "version": version,
-        "precio": f"{precio_usd}$",
+        "precio": f"{precio_usd_redondeado}$",
         "precio_euro": f"{precio_euro}€",
         "pvp_usd": f"{pvp_usd}$",
         "pvp_euro": f"{pvp_euro}€"
