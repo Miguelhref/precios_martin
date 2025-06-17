@@ -5,24 +5,74 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Procesador de Máquinas</title>
   <script defer src="{{ url_for('static', filename='script.js') }}"></script>
-
   <style>
-    body { font-family: sans-serif; margin: 2rem; background-color: #f4f4f4; }
-    h1 { text-align: center; }
-    .botones, .download { display: flex; gap: 1rem; justify-content: center; margin-bottom: 1rem; }
-    .info { text-align: center; margin-bottom: 2rem; font-weight: bold; }
-    .cards { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; }
-    .card {
-      padding: 1rem; border-radius: 8px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 300px;
+    body {
+      font-family: sans-serif;
+      margin: 2rem;
+      background-color: #f4f4f4;
     }
-    .success { background-color: #e6ffed; border-left: 5px solid #2ecc71; }
-    .error { background-color: #ffe6e6; border-left: 5px solid #e74c3c; }
-    input[type="number"] { width: 6rem; padding: 0.2rem; }
+    h1 {
+      text-align: center;
+    }
+    .topbar, .botones {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      margin-bottom: 1rem;
+    }
+    .info {
+      text-align: center;
+      margin-bottom: 2rem;
+      font-weight: bold;
+    }
+    .cards {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      justify-content: center;
+    }
+    .card {
+      padding: 1rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      width: 300px;
+      position: relative;
+    }
+    .success {
+      background-color: #e6ffed;
+      border-left: 5px solid #2ecc71;
+    }
+    .error {
+      background-color: #ffe6e6;
+      border-left: 5px solid #e74c3c;
+    }
+    .error label {
+      display: block;
+      margin-top: 0.2rem;
+    }
+    .error input {
+      display: block;
+      width: 100%;
+      margin-bottom: 0.4rem;
+      padding: 0.3rem;
+      box-sizing: border-box;
+    }
+    .botones-error {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.5rem;
+    }
+    input#valorEuro {
+      width: 6rem;
+    }
   </style>
 </head>
 <body>
   <h1>Procesador de Máquinas</h1>
+
+  <div class="topbar">
+    <button id="descargar">⬇ Descargar CSV</button>
+  </div>
 
   <div class="botones">
     <input type="file" id="archivo" />
@@ -35,9 +85,5 @@
   </div>
 
   <div class="cards" id="resultado"></div>
-
-  <div class="download">
-    <button id="descargar">Descargar CSV</button>
-  </div>
 </body>
 </html>

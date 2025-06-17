@@ -8,6 +8,7 @@ app = Flask(__name__)
 
 resultados_ok = []
 resultados_error = []
+ultimo_modelo = None
 
 @app.route("/")
 def index():
@@ -15,9 +16,10 @@ def index():
 
 @app.route("/procesar", methods=["POST"])
 def procesar():
-    global resultados_ok, resultados_error
+    global resultados_ok, resultados_error, ultimo_modelo
     resultados_ok = []
     resultados_error = []
+    ultimo_modelo = None
 
     archivo = request.files["archivo"]
     factor = float(request.form.get("dolar_euro", "1.0"))
@@ -48,26 +50,48 @@ def procesar():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/corregir", methods=["POST"])
+def corregir():
+    global resultados_ok
+    data = request.get_json()
+    modelo = data.get("modelo")
+    version = data.get("version")
+    precio = data.get("precio_usd")
+    factor = float(data.get("factor", 1.0))
+
+    try:
+        precio = float(precio)
+        precio_euro = round(precio * factor, 2)
+        pvp_usd = round(precio * 1.25, 2)
+        pvp_euro = round(precio_euro * 1.25, 2)
+        resultado = {
+            "modelo": modelo,
+            "version": version,
+            "precio": f"{precio}$",
+            "precio_euro": f"{precio_euro}€",
+            "pvp_usd": f"{pvp_usd}$",
+            "pvp_euro": f"{pvp_euro}€"
+        }
+        resultados_ok.append(resultado)
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
 @app.route("/descargar_csv")
 def descargar_csv():
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["Modelo", "Versión", "Precio USD", "Precio EUR", "PVP USD", "PVP EUR"])
-
     for r in resultados_ok:
-        writer.writerow([
-            r["modelo"], r["version"],
-            r["precio"], r["precio_euro"],
-            r["pvp_usd"], r["pvp_euro"]
-        ])
-
+        writer.writerow([r["modelo"], r["version"], r["precio"], r["precio_euro"], r["pvp_usd"], r["pvp_euro"]])
     output.seek(0)
-    return send_file(
-        io.BytesIO(output.getvalue().encode()),
-        mimetype="text/csv",
-        as_attachment=True,
-        download_name="maquinas_procesadas.csv"
-    )
+    return send_file(io.BytesIO(output.getvalue().encode()), mimetype="text/csv", as_attachment=True, download_name="maquinas_procesadas.csv")
+
+def detectar_numero(precio_str):
+    precio_str = precio_str.strip().replace(" ", "")
+    if ',' not in precio_str and '.' in precio_str and len(precio_str.split('.')[-1]) == 3:
+        return float(precio_str.replace('.', ''))  # 9.100 → 9100
+    return float(precio_str.replace(',', '.'))
 
 def parsear_excel_especializado(df, factor):
     headers = ['Coin', 'Brand', 'Model', 'Hashrate/T', 'Efficiency', 'Price/T', 'Unit Price', 'MOQ', 'Delivery Time']
@@ -106,12 +130,12 @@ def parsear_excel_especializado(df, factor):
                 else:
                     versiones.append(parte + sufijo)
 
-            if unit_price_raw and unit_price_raw.lower() != 'nan' and float(unit_price_raw) > 0:
-                precio_fijo = float(unit_price_raw)
+            if unit_price_raw and unit_price_raw.lower() != 'nan':
+                precio_fijo = detectar_numero(unit_price_raw)
                 for v in versiones:
                     registrar_resultado(modelo, v, precio_fijo, factor)
             elif price_per_t_raw and price_per_t_raw.lower() != 'nan':
-                price_t = float(price_per_t_raw.replace(',', '.'))
+                price_t = detectar_numero(price_per_t_raw)
                 if price_t > 100:
                     for v in versiones:
                         registrar_resultado(modelo, v, price_t, factor)
@@ -126,6 +150,7 @@ def parsear_excel_especializado(df, factor):
             resultados_error.append(str(fila.to_dict()))
 
 def parse(linea, factor):
+    global ultimo_modelo
     matches = re.findall(r'([^\s]*[TtG](?:/[^\s]*)*)', linea)
     modelo = None
     hashrates = []
@@ -136,37 +161,53 @@ def parse(linea, factor):
 
         partes = bloque.split('/')
         segmento = linea.split(bloque)[0].strip()
-        if segmento: modelo = segmento
-        sufijo = bloque[-1].upper()
+
+        if segmento:
+            modelo = segmento
+            ultimo_modelo = modelo
+        elif ultimo_modelo:
+            modelo = ultimo_modelo
+
+        sufijo = None
+        for parte in partes:
+            if re.search(r'[TtG]$', parte):
+                sufijo = parte[-1].upper()
+                break
+        sufijo = sufijo or 'T'
 
         for parte in partes:
-            p = parte.strip()
-            if re.match(r'^\d+(\.\d+)?[TtG]$', p):
-                hashrates.append(p.upper())
-            elif re.match(r'^\d+(\.\d+)?$', p):
-                hashrates.append((p + sufijo).upper())
+            parte = parte.strip()
+            if not parte: continue
+            if not re.search(r'[TtG]$', parte):
+                parte += sufijo
+            hashrates.append(parte.upper())
         break
 
     if not modelo or not hashrates:
         resultados_error.append(linea.strip())
         return
 
-    bloque_precios_match = re.search(r'\$([^\s]*)', linea)
+    bloque_precios_match = re.search(r'\$([^\s]+)', linea)
     if not bloque_precios_match:
         resultados_error.append(linea.strip())
         return
 
-    bloque_precios = bloque_precios_match.group(1)
-    precios_raw = bloque_precios.split('/')
-    precios_version = []
+    bloque_precios = bloque_precios_match.group(1).split('/')
 
-    for pr in precios_raw:
-        pr_limpio = re.sub(r'[^\d.,]', '', pr).replace(',', '.')
-        if pr_limpio:
-            try:
-                precios_version.append(float(pr_limpio))
-            except ValueError:
-                continue
+    precios_version = []
+    sufijo_precio = None
+    for p in bloque_precios:
+        p = p.strip()
+        if p.endswith('T'):
+            sufijo_precio = 'T'
+            break
+
+    for p in bloque_precios:
+        p = p.strip().rstrip('T').replace(',', '.')
+        try:
+            precios_version.append(detectar_numero(p))
+        except:
+            pass
 
     if len(precios_version) == 1 and precios_version[0] > 100:
         for hr in hashrates:
@@ -187,6 +228,8 @@ def parse(linea, factor):
 
     for idx, hr in enumerate(hashrates):
         valor = float(re.sub(r'[^\d.]', '', hr))
+        if '.' in hr and len(hr.split('.')[-1]) > 2:
+            valor = int(valor)
         total = round(valor * precios_por_version[idx], 2)
         registrar_resultado(modelo, hr, total, factor)
 
